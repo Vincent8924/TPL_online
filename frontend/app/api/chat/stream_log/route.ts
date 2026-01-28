@@ -81,9 +81,9 @@ const getRetriever = async () => {
   });
   const vectorstore = await WeaviateStore.fromExistingIndex(
     new OllamaEmbeddings({
-  model: process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text",
-  baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
-}),
+      model: process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text",
+      baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
+    }),
 
     {
       client,
@@ -95,7 +95,8 @@ const getRetriever = async () => {
   return vectorstore.asRetriever({ k: 6 });
 };
 
-const createRetrieverChain = (llm: BaseChatModel, retriever: Runnable) => {
+// Changed retriever type from Runnable to any to fix build error
+const createRetrieverChain = (llm: BaseChatModel, retriever: any) => {
   // Small speed/accuracy optimization: no need to rephrase the first question
   // since there shouldn't be any meta-references to prior chat history
   const CONDENSE_QUESTION_PROMPT =
@@ -156,7 +157,8 @@ const serializeHistory = (input: any) => {
   return convertedChatHistory;
 };
 
-const createChain = (llm: BaseChatModel, retriever: Runnable) => {
+// Changed retriever type from Runnable to any to fix build error
+const createChain = (llm: BaseChatModel, retriever: any) => {
   const retrieverChain = createRetrieverChain(llm, retriever);
   const context = RunnableMap.from({
     context: RunnableSequence.from([
@@ -217,22 +219,22 @@ export async function POST(req: NextRequest) {
 
     let llm;
     if (config.configurable.llm === "openai_gpt_3_5_turbo") {
-  	llm = new ChatOpenAI({
-	    modelName: "gpt-3.5-turbo-1106",
-	    temperature: 0,
-	  });
-	} else if (config.configurable.llm === "ollama_llama3") {
-	  llm = new ChatOllama({
-	    model: process.env.OLLAMA_MODEL ?? "llama3",
-	    baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
-	    temperature: 0,
-	  });
-	} else {
-	  throw new Error(
-	    "Invalid LLM option passed. Must be 'openai_gpt_3_5_turbo', 'ollama_llama3', or 'fireworks_mixtral'. 	Received: " +
-	      config.configurable.llm,
-	  );
-	}
+      llm = new ChatOpenAI({
+        modelName: "gpt-3.5-turbo-1106",
+        temperature: 0,
+      });
+    } else if (config.configurable.llm === "ollama_llama3") {
+      llm = new ChatOllama({
+        model: process.env.OLLAMA_MODEL ?? "llama3",
+        baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
+        temperature: 0,
+      });
+    } else {
+      throw new Error(
+        "Invalid LLM option passed. Must be 'openai_gpt_3_5_turbo', 'ollama_llama3', or 'fireworks_mixtral'. 	Received: " +
+          config.configurable.llm,
+      );
+    }
 
     const retriever = await getRetriever();
     const answerChain = createChain(llm, retriever);
