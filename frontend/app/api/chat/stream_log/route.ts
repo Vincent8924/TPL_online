@@ -13,6 +13,7 @@ import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatOllama, OllamaEmbeddings } from "@langchain/ollama";
+import { ChatFireworks } from "@langchain/community/chat_models/fireworks";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import {
@@ -83,6 +84,10 @@ const getRetriever = async () => {
     new OllamaEmbeddings({
       model: process.env.OLLAMA_EMBED_MODEL ?? "nomic-embed-text",
       baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
+      // Add header to bypass ngrok browser warning page
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+      },
     }),
 
     {
@@ -97,8 +102,6 @@ const getRetriever = async () => {
 
 // Changed retriever type from Runnable to any to fix build error
 const createRetrieverChain = (llm: BaseChatModel, retriever: any) => {
-  // Small speed/accuracy optimization: no need to rephrase the first question
-  // since there shouldn't be any meta-references to prior chat history
   const CONDENSE_QUESTION_PROMPT =
     PromptTemplate.fromTemplate(REPHRASE_TEMPLATE);
   const condenseQuestionChain = RunnableSequence.from([
@@ -228,6 +231,15 @@ export async function POST(req: NextRequest) {
         model: process.env.OLLAMA_MODEL ?? "llama3",
         baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434",
         temperature: 0,
+        // Add header to bypass ngrok browser warning page
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
+    } else if (config.configurable.llm === "fireworks_mixtral") {
+      llm = new ChatFireworks({
+        model: "accounts/fireworks/models/mixtral-8x7b-instruct",
+        temperature: 0,
       });
     } else {
       throw new Error(
@@ -239,19 +251,10 @@ export async function POST(req: NextRequest) {
     const retriever = await getRetriever();
     const answerChain = createChain(llm, retriever);
 
-    /**
-     * Narrows streamed log output down to final output and the FindDocs tagged chain to
-     * selectively stream back sources.
-     *
-     * You can use .stream() to create a ReadableStream with just the final output which
-     * you can pass directly to the Response as well:
-     * https://js.langchain.com/docs/expression_language/interface#stream
-     */
     const stream = answerChain.streamLog(input, config, {
       includeNames: body.includeNames,
     });
 
-    // Only return a selection of output to the frontend
     const textEncoder = new TextEncoder();
     const clientStream = new ReadableStream({
       async start(controller) {
